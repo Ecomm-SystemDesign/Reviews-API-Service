@@ -1,0 +1,9 @@
+*.env
+
+bundle.js
+bundle.js.map
+node_modules
+
+dump.rdb
+
+csvFiles
