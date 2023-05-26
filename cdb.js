@@ -94,6 +94,7 @@ async function createSchema() {
     } else {
       console.log('characteristic_reviews already contains data');
     }
+
   } catch(err) {
     console.error('Error: ', err)
   }
