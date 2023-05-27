@@ -4,21 +4,22 @@ const fs = require('fs');
 const readline = require('node:readline');
 const path = require('path');
 
-async function createDatabase() {
-  const client = new Client({
-    host: process.env.HOST,
-    port: process.env.PORT,
-    user: process.env.USER,
-    password: process.env.PASSWORD
-  });
+const client = new Client({
+  host: process.env.HOST,
+  port: process.env.PG_PORT,
+  user: process.env.USER,
+  password: process.env.PASSWORD
+});
 
-  const pool = new Pool({
-    host: process.env.HOST,
-    port: process.env.PORT,
-    user: process.env.USER,
-    password: process.env.PASSWORD,
-    database: process.env.DATABASE
-  });
+const pool = new Pool({
+  host: process.env.HOST,
+  port: process.env.PG_PORT,
+  user: process.env.USER,
+  password: process.env.PASSWORD,
+  database: process.env.DATABASE
+});
+
+async function createDatabase() {
 
     const createCounterTable = `
     CREATE TABLE IF NOT EXISTS counter (
@@ -52,7 +53,7 @@ async function createDatabase() {
 
     const databaseClient = new Client({
       host: process.env.HOST,
-      port: process.env.PORT,
+      port: process.env.PG_PORT,
       user: process.env.USER,
       password: process.env.PASSWORD,
       database: process.env.DATABASE
@@ -77,10 +78,10 @@ async function createDatabase() {
         response VARCHAR(255) DEFAULT NULL,
         helpfulness INTEGER
       )`,
-      `CREATE TABLE IF NOT EXISTS characteristics (
-        id SERIAL PRIMARY KEY,
-        product_id INTEGER NOT NULL,
-        name varchar(50)
+      `CREATE TABLE IF NOT EXISTS photos(
+      id SERIAL PRIMARY KEY,
+      review_id INT,
+      url TEXT
       )`
     ];
 
@@ -88,6 +89,14 @@ async function createDatabase() {
       await databaseClient.query(table);
       console.log(`${table} created`)
     }
+
+    const createReviewsIndexQuery = `CREATE INDEX idx_reviews_product_id ON reviews (product_id)`;
+    //await databaseClient.query(createReviewsIndexQuery);
+    //uncomment above if not applied yet;
+
+    const createPhotosIndexQuery = `CREATE INDEX idx_photos_review_id ON photos (review_id)`;
+    //await databaseClient.query(createPhotosIndexQuery);
+    //uncomment above if not applied yet;
 
     const { rows: reviewsCounterRows } = await databaseClient.query(
       `SELECT is_loaded FROM counter WHERE table_name = 'reviews';`
@@ -114,36 +123,50 @@ async function createDatabase() {
       console.log('reviews table already has data');
     }
 
-    const { rows: characteristicsCounterRows } = await databaseClient.query(
-      `SELECT is_loaded FROM counter WHERE table_name = 'characteristics';`
+    const { rows: photosCounterRows } = await databaseClient.query(
+      `SELECT is_loaded FROM counter WHERE table_name = 'photos';`
     );
 
-    const characteristicsTableLoaded = characteristicsCounterRows.length > 0 && characteristicsCounterRows[0].is_loaded;
+    const photosTableLoaded = photosCounterRows.length > 0 && photosCounterRows[0].is_loaded;
 
-    if (!characteristicsTableLoaded) {
-      console.log('loading data into charateristics table');
-      let CSVPath = path.join(__dirname, 'csvFiles/characteristics.csv');
+    if (!photosTableLoaded) {
+      console.log('loading data into photos table');
+      let CSVPath = path.join(__dirname, 'csvFiles/reviews_photos.csv');
 
-      const copyCharacteristicsQuery = `
-      COPY characteristics (
-        id, product_id, name
+      const copyPhotosQuery = `
+      COPY photos (
+        id, review_id, url
       )
       FROM '${CSVPath}'
       DELIMITER ','
       CSV HEADER;
       `;
-      await pool.query(copyCharacteristicsQuery);
-      await databaseClient.query(updateCounter('characteristics', true));
-      console.log('copied csv files into characteristics table');
+      await pool.query(copyPhotosQuery);
+      await databaseClient.query(updateCounter('photos', true));
+      console.log('copied csv files into photos table');
     } else {
-      console.log('characteristics table already has data');
+      console.log('photos table already has data');
     }
 
-    await databaseClient.end();
-    await pool.end();
   } catch (error) {
     console.error('error', error);
   }
   }
 
   createDatabase().catch(console.error);
+
+  async function closeDatabase() {
+    try {
+      await client.end();
+      await pool.end();
+      console.log('Database connections closed.');
+    } catch (error) {
+      console.error('Error closing database connections:', error);
+    }
+  }
+
+  // Call closeDatabase() when you want to shut down the application or explicitly close the connections.
+
+  module.exports = {
+    pool
+  };

@@ -1,10 +1,25 @@
 {
+  "name": "reviews-api-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "server-dev": "npx nodemon --watch ./server ./server/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ecomm-SystemDesign/Reviews-API-Service.git"
+  },
+  "author": "Tony Truong",
+  "license": "ISC",
   "dependencies": {
     "axios": "^1.4.0",
     "cassandra-driver": "^4.6.4",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "fs": "^0.0.1-security",
+    "morgan": "^1.10.0",
+    "nodemon": "^2.0.22",
     "path": "^0.12.7",
     "pg": "^8.11.0",
     "postgres": "^3.3.4"

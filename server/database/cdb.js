@@ -25,44 +25,44 @@ async function createSchema() {
     await client.execute(counterTable);
 
     const initialCounterQuery = `UPDATE ${process.env.CASSANDRA_KEYSPACE}.counter SET counter_value = counter_value + ? WHERE counter_name = ?`;
-    await client.execute(initialCounterQuery, [0, 'photos'], {prepare: true});
+    await client.execute(initialCounterQuery, [0, 'characteristics'], {prepare: true});
     await client.execute(initialCounterQuery, [0, 'characteristic_reviews'], {prepare: true});
     console.log('initial counter value inserted');
     const getCount = `SELECT counter_value FROM ${process.env.CASSANDRA_KEYSPACE}.counter WHERE counter_name = ?`;
-    const photosResult = await client.execute(getCount, ['photos']);
-    const photosCount = photosResult.rows[0].counter_value;
-    console.log('Photos counter value:', photosCount);
+    const characteristicsResult = await client.execute(getCount, ['characteristics']);
+    const characteristicsCount = characteristicsResult.rows[0].counter_value;
+    console.log('Characteristics counter value:', characteristicsCount);
     const characteristicReviewsResult = await client.execute(getCount, ['characteristic_reviews']);
     const characteristicReviewsCount = characteristicReviewsResult.rows[0].counter_value;
-    console.log('Characteristic_reviews counter value:', photosCount);
+    console.log('Characteristic_reviews counter value:', characteristicsCount);
     const incrementCounterQuery = `UPDATE ${process.env.CASSANDRA_KEYSPACE}.counter SET counter_value = counter_value + 1 WHERE counter_name = ?`;
 
-    const photosTableQuery = `CREATE TABLE IF NOT EXISTS ${process.env.CASSANDRA_KEYSPACE}.photos (
+    const characteristicsTableQuery = `CREATE TABLE IF NOT EXISTS ${process.env.CASSANDRA_KEYSPACE}.characteristics (
       id INT PRIMARY KEY,
-      review_id INT,
-      url TEXT
+      product_id INT,
+      name TEXT
     )`
-    await client.execute(photosTableQuery);
-    console.log('images table created');
+    await client.execute(characteristicsTableQuery);
+    console.log('characteristics table created');
 
-    if (photosCount.equals(cassandra.types.Long.ZERO)) {
-      const photoData = fs.readFileSync(path.join(__dirname, 'csvFiles/reviews_photos.csv'), 'utf8');
-      const photoDataRows = photoData.split('\n');
+    if (characteristicsCount.equals(cassandra.types.Long.ZERO)) {
+      const characteristicsData = fs.readFileSync(path.join(__dirname, 'csvFiles/characteristics.csv'), 'utf8');
+      const characteristicsDataRows = characteristicsData.split('\n');
 
-      for (let i = 1; i < photoDataRows.length; i++) {
-        const values = photoDataRows[i].split(',');
+      for (let i = 1; i < characteristicsDataRows.length; i++) {
+        const values = characteristicsDataRows[i].split(',');
         const id = parseInt(values[0]);
         const reviewId = parseInt(values[1]);
-        const url = values[2].replace(/"/g, '');
+        const name = values[2].replace(/"/g, '');
 
-        const insertQuery = `INSERT INTO ${process.env.CASSANDRA_KEYSPACE}.photos (id, review_id, url) VALUES (?, ?, ?)`;
-        await client.execute(insertQuery, [id, reviewId, url], {prepare: true});
+        const insertQuery = `INSERT INTO ${process.env.CASSANDRA_KEYSPACE}.characteristics (id, review_id, url) VALUES (?, ?, ?)`;
+        await client.execute(insertQuery, [id, reviewId, name], {prepare: true});
       }
       console.log('Data inserted into Cassandra');
-      await client.execute(incrementCounterQuery, ['photos'], {prepare: true});
-      console.log('Photo counter incremented');
+      await client.execute(incrementCounterQuery, ['characteristics'], {prepare: true});
+      console.log('characteristics counter incremented');
     } else {
-      console.log('photos table already contains data');
+      console.log('characteristics table already contains data');
     }
 
     const characteristicReviews = `CREATE TABLE IF NOT EXISTS ${process.env.CASSANDRA_KEYSPACE}.characteristic_reviews (
@@ -101,3 +101,7 @@ async function createSchema() {
 }
 
 createSchema().catch(console.error);
+
+module.exports = {
+  client
+};
