@@ -68,7 +68,7 @@ async function createDatabase() {
         id SERIAL PRIMARY KEY,
         product_id INTEGER NOT NULL,
         rating INTEGER NOT NULL,
-        date VARCHAR(50) NOT NULL,
+        date BIGINT NOT NULL,
         summary VARCHAR(255) NOT NULL,
         body VARCHAR(2000) NOT NULL,
         recommend BOOLEAN NOT NULL,
@@ -81,7 +81,11 @@ async function createDatabase() {
       `CREATE TABLE IF NOT EXISTS photos(
       id SERIAL PRIMARY KEY,
       review_id INT,
-      url TEXT
+      url TEXT,
+      CONSTRAINT fk_review_id
+        FOREIGN KEY(review_id)
+          REFERENCES reviews(id)
+          ON DELETE CASCADE
       )`
     ];
 
@@ -114,7 +118,8 @@ async function createDatabase() {
       )
       FROM '${CSVPath}'
       DELIMITER ','
-      CSV HEADER;
+      CSV NULL 'null'
+      HEADER;
       `;
       await pool.query(copyReviewsQuery);
       await databaseClient.query(updateCounter('reviews', true));
@@ -139,7 +144,8 @@ async function createDatabase() {
       )
       FROM '${CSVPath}'
       DELIMITER ','
-      CSV HEADER;
+      CSV NULL 'null'
+      HEADER;
       `;
       await pool.query(copyPhotosQuery);
       await databaseClient.query(updateCounter('photos', true));

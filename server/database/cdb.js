@@ -52,11 +52,11 @@ async function createSchema() {
       for (let i = 1; i < characteristicsDataRows.length; i++) {
         const values = characteristicsDataRows[i].split(',');
         const id = parseInt(values[0]);
-        const reviewId = parseInt(values[1]);
+        const productId = parseInt(values[1]);
         const name = values[2].replace(/"/g, '');
 
-        const insertQuery = `INSERT INTO ${process.env.CASSANDRA_KEYSPACE}.characteristics (id, review_id, url) VALUES (?, ?, ?)`;
-        await client.execute(insertQuery, [id, reviewId, name], {prepare: true});
+        const insertQuery = `INSERT INTO ${process.env.CASSANDRA_KEYSPACE}.characteristics (id, product_id, name) VALUES (?, ?, ?)`;
+        await client.execute(insertQuery, [id, productId, name], {prepare: true});
       }
       console.log('Data inserted into Cassandra');
       await client.execute(incrementCounterQuery, ['characteristics'], {prepare: true});
