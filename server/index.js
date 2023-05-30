@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const morgan = require('morgan');
-const { getReviews } = require('./controllers/controllers.js');
+const { getReviews, getReviewsMeta } = require('./controllers/controllers.js');
 
 const app = express();
 
@@ -15,6 +15,7 @@ app.use(router);
 
 //routes
 router.get('/reviews', getReviews);
+router.get('/reviews/meta', getReviewsMeta);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

@@ -86,7 +86,26 @@ async function createDatabase() {
         FOREIGN KEY(review_id)
           REFERENCES reviews(id)
           ON DELETE CASCADE
-      )`
+      )`,
+      `CREATE TABLE IF NOT EXISTS characteristic_reviews(
+        id SERIAL PRIMARY KEY,
+        characteristic_id INT,
+        review_id INT,
+        value SMALLINT,
+        CONSTRAINT fk_review_id
+        FOREIGN KEY(review_id)
+          REFERENCES reviews(id)
+          ON DELETE CASCADE
+      )`,
+        `CREATE TABLE IF NOT EXISTS characteristics(
+          id SERIAL PRIMARY KEY,
+          product_id INT,
+          name VARCHAR(10),
+          CONSTRAINT fk_id
+          FOREIGN KEY(id)
+            REFERENCES characteristics(id)
+            ON DELETE CASCADE
+        )`
     ];
 
     for (const table of createTables) {
@@ -100,6 +119,10 @@ async function createDatabase() {
 
     const createPhotosIndexQuery = `CREATE INDEX idx_photos_review_id ON photos (review_id)`;
     //await databaseClient.query(createPhotosIndexQuery);
+    //uncomment above if not applied yet;
+
+    const createCharacteristicReviewsIndexQuery = `CREATE INDEX idx_characteristic_reviews_review_id ON characteristic_reviews (review_id)`;
+    // await databaseClient.query(createCharacteristicReviewsIndexQuery);
     //uncomment above if not applied yet;
 
     const { rows: reviewsCounterRows } = await databaseClient.query(
@@ -152,6 +175,58 @@ async function createDatabase() {
       console.log('copied csv files into photos table');
     } else {
       console.log('photos table already has data');
+    }
+
+    const { rows: characteristicReviewsCounterRows } = await databaseClient.query(
+      `SELECT is_loaded FROM counter WHERE table_name = 'characteristic_reviews';`
+    );
+
+    const characteristicReviewsTableLoaded = characteristicReviewsCounterRows.length > 0 && characteristicReviewsCounterRows[0].is_loaded;
+
+    if (!characteristicReviewsTableLoaded) {
+      console.log('loading data into characteristic_reviews table');
+      let CSVPath = path.join(__dirname, 'csvFiles/characteristic_reviews.csv');
+
+      const copyCharacteristicReviewsQuery = `
+      COPY characteristic_reviews (
+        id, characteristic_id, review_id, value
+      )
+      FROM '${CSVPath}'
+      DELIMITER ','
+      CSV NULL 'null'
+      HEADER;
+      `;
+      await pool.query(copyCharacteristicReviewsQuery);
+      await databaseClient.query(updateCounter('characteristic_reviews', true));
+      console.log('copied csv files into characteristic_reviews table');
+    } else {
+      console.log('characteristic_reviews table already has data');
+    }
+
+    const { rows: characteristicsCounterRows } = await databaseClient.query(
+      `SELECT is_loaded FROM counter WHERE table_name = 'characteristics';`
+    );
+
+    const characteristicsTableLoaded = characteristicsCounterRows.length > 0 && characteristicsCounterRows[0].is_loaded;
+
+    if (!characteristicsTableLoaded) {
+      console.log('loading data into characteristics table');
+      let CSVPath = path.join(__dirname, 'csvFiles/characteristics.csv');
+
+      const copyCharacteristicsQuery = `
+      COPY characteristics (
+        id, product_id, name
+      )
+      FROM '${CSVPath}'
+      DELIMITER ','
+      CSV NULL 'null'
+      HEADER;
+      `;
+      await pool.query(copyCharacteristicsQuery);
+      await databaseClient.query(updateCounter('characteristics', true));
+      console.log('copied csv files into characteristics table');
+    } else {
+      console.log('Characteristics table already has data');
     }
 
   } catch (error) {

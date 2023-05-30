@@ -1,4 +1,4 @@
-const { getProductReviews } = require('../models/pgdbModels.js');
+const { getProductReviews, getReviewsMetaData } = require('../models/pgdbModels.js');
 
 module.exports = {
   getReviews: (req, res) => {
@@ -17,6 +17,30 @@ module.exports = {
         summary: row.summary
       }));
       res.send({ results: results }).status(200);
+    });
+  },
+
+  getReviewsMeta: (req, res) => {
+    getReviewsMetaData(req.query.product_id)
+    .then((data) => {
+      const { result1, result2 } = data;
+      const characteristics = {};
+      const ratings = {};
+
+      if (result1.rows[0].metadata) {
+        result1.rows[0].metadata.forEach((row) => {
+          characteristics[row.name] = { id: row.id, value: row.value };
+        });
+      }
+
+      result2.rows.forEach((row) => {
+        ratings[row.rating] = row.count;
+      });
+
+      res.send({
+        characteristics: characteristics,
+        ratings: ratings
+      }).status(200);
     });
   }
 }
