@@ -35,6 +35,21 @@ async function createDatabase() {
       DO UPDATE SET is_loaded = ${isLoaded};
       `;
 
+      const createMetadataAggregation = `
+      CREATE TABLE IF NOT EXISTS metadata_aggregation (
+        product_id INT PRIMARY KEY,
+        ratings JSONB,
+        recommends JSONB
+      );
+      `;
+
+      const createCharacteristicsMetadata = `
+      CREATE TABLE IF NOT EXISTS characteristics_metadata (
+        product_id INT PRIMARY KEY,
+        characteristics JSONB
+      )
+      `;
+
   try {
     await client.connect();
     const checkDatabaseExist = `SELECT datname FROM pg_catalog.pg_database WHERE lower(datname) = lower('${process.env.DATABASE}')`;
@@ -87,22 +102,18 @@ async function createDatabase() {
           REFERENCES reviews(id)
           ON DELETE CASCADE
       )`,
-      `CREATE TABLE IF NOT EXISTS characteristic_reviews(
-        id SERIAL PRIMARY KEY,
-        characteristic_id INT,
-        review_id INT,
-        value SMALLINT,
-        CONSTRAINT fk_review_id
-        FOREIGN KEY(review_id)
-          REFERENCES reviews(id)
-          ON DELETE CASCADE
-      )`,
         `CREATE TABLE IF NOT EXISTS characteristics(
           id SERIAL PRIMARY KEY,
           product_id INT,
-          name VARCHAR(10),
-          CONSTRAINT fk_id
-          FOREIGN KEY(id)
+          name VARCHAR(10)
+        )`,
+        `CREATE TABLE IF NOT EXISTS characteristic_reviews(
+          id SERIAL PRIMARY KEY,
+          characteristic_id INT,
+          review_id INT,
+          value SMALLINT,
+          CONSTRAINT fk_characteristic_id
+          FOREIGN KEY(characteristic_id)
             REFERENCES characteristics(id)
             ON DELETE CASCADE
         )`
@@ -121,8 +132,12 @@ async function createDatabase() {
     //await databaseClient.query(createPhotosIndexQuery);
     //uncomment above if not applied yet;
 
-    const createCharacteristicReviewsIndexQuery = `CREATE INDEX idx_characteristic_reviews_review_id ON characteristic_reviews (review_id)`;
-    // await databaseClient.query(createCharacteristicReviewsIndexQuery);
+    const createCharacteristicReviewsIndexQuery = `CREATE INDEX idx_characteristic_reviews_characteristic_id ON characteristic_reviews (characteristic_id)`;
+    //await databaseClient.query(createCharacteristicReviewsIndexQuery);
+    //uncomment above if not applied yet;
+
+    const createCharacteristicsIndexQuery = `CREATE INDEX idx_characteristics_product_id ON characteristics (product_id)`;
+    //await databaseClient.query(createCharacteristicsIndexQuery);
     //uncomment above if not applied yet;
 
     const { rows: reviewsCounterRows } = await databaseClient.query(
@@ -179,34 +194,12 @@ async function createDatabase() {
 
     const { rows: characteristicReviewsCounterRows } = await databaseClient.query(
       `SELECT is_loaded FROM counter WHERE table_name = 'characteristic_reviews';`
-    );
+      );
 
-    const characteristicReviewsTableLoaded = characteristicReviewsCounterRows.length > 0 && characteristicReviewsCounterRows[0].is_loaded;
 
-    if (!characteristicReviewsTableLoaded) {
-      console.log('loading data into characteristic_reviews table');
-      let CSVPath = path.join(__dirname, 'csvFiles/characteristic_reviews.csv');
-
-      const copyCharacteristicReviewsQuery = `
-      COPY characteristic_reviews (
-        id, characteristic_id, review_id, value
-      )
-      FROM '${CSVPath}'
-      DELIMITER ','
-      CSV NULL 'null'
-      HEADER;
-      `;
-      await pool.query(copyCharacteristicReviewsQuery);
-      await databaseClient.query(updateCounter('characteristic_reviews', true));
-      console.log('copied csv files into characteristic_reviews table');
-    } else {
-      console.log('characteristic_reviews table already has data');
-    }
-
-    const { rows: characteristicsCounterRows } = await databaseClient.query(
-      `SELECT is_loaded FROM counter WHERE table_name = 'characteristics';`
-    );
-
+      const { rows: characteristicsCounterRows } = await databaseClient.query(
+        `SELECT is_loaded FROM counter WHERE table_name = 'characteristics';`
+      );
     const characteristicsTableLoaded = characteristicsCounterRows.length > 0 && characteristicsCounterRows[0].is_loaded;
 
     if (!characteristicsTableLoaded) {
@@ -216,23 +209,126 @@ async function createDatabase() {
       const copyCharacteristicsQuery = `
       COPY characteristics (
         id, product_id, name
-      )
-      FROM '${CSVPath}'
-      DELIMITER ','
-      CSV NULL 'null'
-      HEADER;
-      `;
-      await pool.query(copyCharacteristicsQuery);
-      await databaseClient.query(updateCounter('characteristics', true));
-      console.log('copied csv files into characteristics table');
-    } else {
-      console.log('Characteristics table already has data');
+        )
+        FROM '${CSVPath}'
+        DELIMITER ','
+        CSV NULL 'null'
+        HEADER;
+        `;
+        await pool.query(copyCharacteristicsQuery);
+        await databaseClient.query(updateCounter('characteristics', true));
+        console.log('copied csv files into characteristics table');
+      } else {
+        console.log('Characteristics table already has data');
+      }
+
+      const characteristicReviewsTableLoaded = characteristicReviewsCounterRows.length > 0 && characteristicReviewsCounterRows[0].is_loaded;
+
+      if (!characteristicReviewsTableLoaded) {
+        console.log('loading data into characteristic_reviews table');
+        let CSVPath = path.join(__dirname, 'csvFiles/characteristic_reviews.csv');
+
+        const copyCharacteristicReviewsQuery = `
+        COPY characteristic_reviews (
+          id, characteristic_id, review_id, value
+        )
+        FROM '${CSVPath}'
+        DELIMITER ','
+        CSV NULL 'null'
+        HEADER;
+        `;
+        await pool.query(copyCharacteristicReviewsQuery);
+        await databaseClient.query(updateCounter('characteristic_reviews', true));
+        console.log('copied csv files into characteristic_reviews table');
+      } else {
+        console.log('characteristic_reviews table already has data');
+      }
+
+      await databaseClient.query(createMetadataAggregation);
+
+      const { rows: metadataAggregationCounterRows } = await databaseClient.query(
+        `SELECT is_loaded from counter WHERE table_name = 'metadata_aggregation';`
+      );
+
+        const metadataAggregationTableLoaded = metadataAggregationCounterRows.length > 0 && metadataAggregationCounterRows[0].is_loaded;
+
+        if (!metadataAggregationTableLoaded) {
+          console.log('loading into metadata_aggregation table');
+
+          const populateMetadataAggregation = `
+          INSERT INTO metadata_aggregation (product_id, ratings, recommends)
+          SELECT
+            r.product_id,
+            jsonb_agg(jsonb_build_object('rating', r.rating, 'count', r.rating_count)) AS ratings,
+            jsonb_build_object(
+              'true', SUM(CASE WHEN r.recommend = true THEN 1 ELSE 0 END),
+              'false', SUM(CASE WHEN r.recommend = false THEN 1 ELSE 0 END)
+            ) AS recommends
+          FROM (
+            SELECT
+              product_id,
+              rating,
+              recommend,
+              COUNT(*) AS rating_count
+            FROM reviews
+            GROUP BY product_id, rating, recommend
+          ) AS r
+          GROUP BY r.product_id;
+        `;
+
+          await databaseClient.query(populateMetadataAggregation);
+          console.log('average ratings inserted into metadata_aggregation table');
+
+          await databaseClient.query(updateCounter('metadata_aggregation', true));
+          console.log('copied csv files into metadata_aggregation table');
+
+        }
+
+        await databaseClient.query(createCharacteristicsMetadata);
+
+        const { rows: characteristicsMetadataCounterRows } = await databaseClient.query(
+          `SELECT is_loaded from counter WHERE table_name = 'characteristics_metadata';`
+        );
+
+          const characteristicsMetadataTableLoaded = characteristicsMetadataCounterRows.length > 0 && characteristicsMetadataCounterRows[0].is_loaded;
+
+          if (!characteristicsMetadataTableLoaded) {
+            console.log('loading into characteristics_metadata table');
+
+            const populateCharacteristicsMetadata = `
+            INSERT INTO characteristics_metadata (product_id, characteristics)
+            SELECT
+            characteristics.product_id,
+            jsonb_agg(jsonb_build_object(
+              'characteristic_id', characteristic_reviews.characteristic_id,
+              'name', characteristics.name,
+              'avg', characteristic_reviews.avg_value
+            )) AS characteristics_data
+          FROM (
+            SELECT
+              characteristic_reviews.characteristic_id,
+              AVG(characteristic_reviews.value) AS avg_value
+            FROM characteristic_reviews
+            JOIN characteristics ON characteristic_reviews.characteristic_id = characteristics.id
+            GROUP BY characteristic_reviews.characteristic_id
+          ) AS characteristic_reviews
+          JOIN characteristics ON characteristic_reviews.characteristic_id = characteristics.id
+          GROUP BY characteristics.product_id;
+          `;
+
+            await databaseClient.query(populateCharacteristicsMetadata);
+            console.log('average ratings inserted into characteristics_metadata table');
+
+            await databaseClient.query(updateCounter('characteristics_metadata', true));
+            console.log('updated counter for characteristics_metadata table');
+
+          }
+
+    } catch (error) {
+      console.error('error', error);
     }
 
-  } catch (error) {
-    console.error('error', error);
-  }
-  }
+    }
 
   createDatabase().catch(console.error);
 

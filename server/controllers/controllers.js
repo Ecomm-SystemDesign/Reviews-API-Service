@@ -23,24 +23,30 @@ module.exports = {
   getReviewsMeta: (req, res) => {
     getReviewsMetaData(req.query.product_id)
     .then((data) => {
+      const response = {
+        characteristics: {},
+        product_id: req.query.product_id,
+        ratings: {},
+        recommended: {
+          false: '0',
+          true: '0'
+        }
+      };
       const { result1, result2 } = data;
-      const characteristics = {};
-      const ratings = {};
 
-      if (result1.rows[0].metadata) {
-        result1.rows[0].metadata.forEach((row) => {
-          characteristics[row.name] = { id: row.id, value: row.value };
+      if (result1.rows[0] && result2.rows[0]) {
+        result1.rows[0].characteristics.forEach((row) => {
+          response.characteristics[row.name] = { id: row.characteristic_id, value: row.avg.toString() }
         });
+        result2.rows[0].ratings.forEach((row) => {
+          response.ratings[row.rating] = row.count.toString()
+        });
+        response.recommended.true = result2.rows[0].true;
+        response.recommended.true = result2.rows[0].false;
       }
 
-      result2.rows.forEach((row) => {
-        ratings[row.rating] = row.count;
-      });
 
-      res.send({
-        characteristics: characteristics,
-        ratings: ratings
-      }).status(200);
+      res.send(response).status(200);
     });
   }
 }

@@ -38,14 +38,7 @@ module.exports = {
         const client = await pgdb.pool.connect();
         const query1 = {
           text:  `
-          SELECT json_agg(json_build_object('name', c.name, 'id', c.id, 'value', avg_value)) AS metadata
-          FROM (
-          SELECT characteristics.id, characteristics.name, AVG(characteristic_reviews.value)::numeric AS avg_value
-          FROM characteristics
-          JOIN characteristic_reviews ON characteristics.id = characteristic_reviews.characteristic_id
-          WHERE characteristics.product_id = $1
-          GROUP BY characteristics.id, characteristics.name
-          ) AS c;
+          SELECT * FROM characteristics_metadata WHERE product_id = $1
           `,
           values: [product_id]
         };
@@ -53,11 +46,7 @@ module.exports = {
 
         const query2 = {
           text:  `
-          SELECT reviews.rating, COUNT(*)
-          FROM reviews
-          WHERE reviews.product_id = $1
-          GROUP BY reviews.rating
-          ORDER BY reviews.rating
+          SELECT * FROM metadata_aggregation WHERE product_id = $1
           `,
           values: [product_id]
         };
