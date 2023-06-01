@@ -140,6 +140,75 @@ async function createDatabase() {
     //await databaseClient.query(createCharacteristicsIndexQuery);
     //uncomment above if not applied yet;
 
+    const ratingCountTrigger = `
+    CREATE OR REPLACE FUNCTION update_rating_count()
+      RETURNS TRIGGER
+      LANGUAGE PLPGSQL
+      AS
+      $$
+      BEGIN
+      IF TG_OP = 'INSERT' THEN
+      UPDATE metadata_aggregation
+      SET ratings = COALESCE(ratings, '[]'::jsonb) || jsonb_build_object('rating', NEW.rating, 'count', 1)
+      WHERE product_id = NEW.product_id;
+
+      UPDATE metadata_aggregation
+      SET recommends = jsonb_build_object(
+        'true', COALESCE((recommends->>'true')::int, 0) + CASE WHEN NEW.recommend = true THEN 1 ELSE 0 END,
+        'false', COALESCE((recommends->>'false')::init, 0) + CASE WHEN NEW.recommend = false THEN 1 ELSE 0 END
+      )
+      WHERE product_id = NEW.product_id;
+
+      ELSIF TG_OP = 'DELETE' THEN
+      UPDATE metadata_aggregation
+      SET ratings = jsonb_set(ratings, array_position(ratings, jsonb_build_object('rating', OLD.rating, 'count', 1)) -1, ratings[array_position(ratings, jsonb_build_object('rating', OLD.rating, 'count', 1)) - 1] || jsonb_build_object('count', -1))
+      WHERE product_id = OLD.product_id;
+
+      UPDATE metadata_aggregation
+      SET recommends = jsonb_build_object(
+        'true', COALESCE((recommends->>'true')::init, 0) - CASE WHEN OLD.recommend = true THEN 1 ELSE 0 END,
+        'false', COALESCE((recommends->>'false')::init, 0) - CASE WHEN OLD.recommend = false THEN 1 ELSE 0 END
+      )
+      WHERE product_id = OLD.product_id;
+      END IF;
+
+      UPDATE characteristics_metadata
+      SET characteristics = (
+        SELECT jsonb_agg(jsonb_build_object(
+          'characteristic_id', cr.characteristic_id,
+          'name', cr.name,
+          'avg', cr.avg_value
+        )) AS characteristics_data
+        FROM (
+          SELECT
+          cr.characteristic_id,
+          AVG(cr.value) AS avg_value
+          FROM characteristic_reviews cr
+          JOIN characteristics c ON cr.characteristic_id = c.id
+          WHERE cr.review_id = NEW.id
+          GROUP BY cr.characteristic_id
+        ) AS cr
+        JOIN characteristics c ON cr.characteristic_id = c.id
+        WHERE c.product_id = NEW.product_id
+        GROUP BY c.product_id
+      )
+      WHERE product_id = NEW.product_id;
+
+      RETURN NEW;
+      END;
+      $$;
+
+      DROP TRIGGER IF EXISTS update_rating_count_TRIGGER ON reviews;
+      CREATE TRIGGER update_rating_count_trigger
+      AFTER INSERT OR DELETE ON reviews
+      FOR EACH ROW
+      EXECUTE FUNCTION update_rating_count();
+    `
+
+    await databaseClient.query(ratingCountTrigger);
+
+
+
     const { rows: reviewsCounterRows } = await databaseClient.query(
       `SELECT is_loaded FROM counter WHERE table_name = 'reviews';`
     );

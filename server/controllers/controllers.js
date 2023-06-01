@@ -1,4 +1,4 @@
-const { getProductReviews, getReviewsMetaData } = require('../models/pgdbModels.js');
+const { getProductReviews, getReviewsMetaData, addReview } = require('../models/pgdbModels.js');
 
 module.exports = {
   getReviews: (req, res) => {
@@ -47,6 +47,13 @@ module.exports = {
 
 
       res.send(response).status(200);
+    });
+  },
+
+  postReviews: (req, res) => {
+    addReview(req.body.product_id, req.body.rating, req.body.summary, req.body.body, req.body.recommend, req.body.name, req.body.email, req.body.photos, req.body.characteristics)
+    .then(() => {
+      res.sendStatus(201);
     });
   }
 }

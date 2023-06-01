@@ -5,7 +5,9 @@ module.exports = {
     let order = '';
 
     if (sort === 'relevant') {
-      order = `ORDER BY CASE WHEN row_number <= 3 THEN 0 ELSE 1 END, reviews.helpfulness DESC, reviews.date DESC`;
+      order = `ORDER BY
+        CASE WHEN reviews.helpfulness <= (SELECT MAX(reviews.helpfulness) FROM reviews WHERE reviews.product_id = $1) - 2 THEN reviews.helpfulness END DESC,
+        CASE WHEN reviews.helpfulness > (SELECT MAX(reviews.helpfulness) FROM reviews WHERE reviews.product_id = $1) - 2 THEN reviews.date END DESC`;
     } else if (sort === 'newest') {
       order = `ORDER BY reviews.date DESC, reviews.helpfulness DESC`;
     } else if (sort === 'helpful') {
@@ -13,17 +15,13 @@ module.exports = {
     }
 
     const query = {
-      text: `SELECT reviews.*, TO_CHAR(TO_TIMESTAMP(reviews.date::bigint / 1000), 'YYYY-MM_DD"T"HH24:MI:SS.MS"Z"') AS formatted_date, array_agg(
+      text: `SELECT reviews.*, TO_CHAR(TO_TIMESTAMP(reviews.date::bigint / 1000), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS formatted_date, array_agg(
         CONCAT('id: ', photos.id, ', url: ', photos.url, '')
       ) AS photos_data
-      FROM (
-        SELECT reviews.*, ROW_NUMBER() OVER (ORDER BY reviews.helpfulness DESC, reviews.date DESC) AS row_number
-        FROM reviews
-        WHERE reviews.product_id = $1
-      ) AS reviews
-      JOIN photos ON reviews.id = photos.review_id
-      WHERE reviews.row_number <= 3
-      GROUP BY reviews.id, reviews.product_id, reviews.rating, reviews.date, reviews.summary, reviews.body, reviews.recommend, reviews.reported, reviews.reviewer_name, reviews.reviewer_email, reviews.response, reviews.helpfulness, reviews.row_number
+      FROM reviews
+      LEFT JOIN photos ON reviews.id = photos.review_id
+      WHERE reviews.product_id = $1
+      GROUP BY reviews.id, reviews.product_id, reviews.rating, reviews.date, reviews.summary, reviews.body, reviews.recommend, reviews.reported, reviews.reviewer_name, reviews.reviewer_email, reviews.response, reviews.helpfulness
       ${order}`,
       values: [product_id]
     };
@@ -63,5 +61,15 @@ module.exports = {
       }
     };
     return executeQueries();
+  },
+
+  addReview: (product_id, rating, summary, body, recommend, name, email, photos, characteristics) => {
+    const query = {
+      text: `
+      INSERT INTO reviews (product_id, rating, summary, body, recommend, name, email, photos, characterstics) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+      `,
+      values: [product_id, rating, summary, body, recommend, name, email, photos, characteristics]
+    };
+    return pgdb.pool.query(query);
   }
 };
