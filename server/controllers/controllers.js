@@ -41,8 +41,8 @@ module.exports = {
         result2.rows[0].ratings.forEach((row) => {
           response.ratings[row.rating] = row.count.toString()
         });
-        response.recommended.true = result2.rows[0].true;
-        response.recommended.true = result2.rows[0].false;
+        response.recommended.true = result2.rows[0].recommends.true;
+        response.recommended.false = result2.rows[0].recommends.false;
       }
 
 

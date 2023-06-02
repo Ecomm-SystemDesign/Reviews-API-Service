@@ -64,12 +64,75 @@ module.exports = {
   },
 
   addReview: (product_id, rating, summary, body, recommend, name, email, photos, characteristics) => {
-    const query = {
-      text: `
-      INSERT INTO reviews (product_id, rating, summary, body, recommend, name, email, photos, characterstics) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
-      `,
-      values: [product_id, rating, summary, body, recommend, name, email, photos, characteristics]
-    };
-    return pgdb.pool.query(query);
+
+    const queries = [
+      {
+        text: `
+        INSERT INTO reviews (product_id, rating, summary, body, recommend, reviewer_name, reviewer_email, date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id
+        `,
+        values: [product_id, rating, summary, body, recommend, name, email, Date.now()]
+      },
+      {
+        text: `
+        INSERT INTO photos (review_id, url)
+        VALUES ($1, $2)
+        `
+      },
+      {
+        text: `
+        INSERT INTO characteristics (product_id, name)
+        VALUES ($1, $2)
+        RETURNING id
+        `
+      },
+      {
+        text: `
+        INSERT INTO characteristic_reviews (characteristic_id, review_id, value)
+        VALUES ($1, $2, $3)
+        `
+      }
+    ];
+
+    let reviewId;
+
+    return pgdb.pool.query(queries[0])
+      .then((result) => {
+        reviewId = result.rows[0].id;
+
+        const photoPromises = photos.map((url) => {
+          const query = {
+            text: queries[1].text,
+            values: [reviewId, url]
+          };
+          return pgdb.pool.query(query);
+        });
+
+        return Promise.all(photoPromises);
+      })
+      .then(() => {
+        const characteristicsArray = Object.values(characteristics);
+        const names = ['Fit', 'Length', 'Comfort', 'Quality'];
+        const characteristicsPromises = characteristicsArray.map((value, index) => {
+          const query = {
+            text: queries[2].text,
+            values: [product_id, names[index]]
+          };
+
+          return pgdb.pool.query(query)
+            .then((result) => {
+              const characteristicId = result.rows[0].id;
+              const query = {
+                text: queries[3].text,
+                values: [characteristicId, reviewId, value]
+              };
+
+              return pgdb.pool.query(query);
+            });
+        });
+
+        return Promise.all(characteristicsPromises);
+      });
   }
 };
