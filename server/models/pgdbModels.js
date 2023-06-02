@@ -134,5 +134,16 @@ module.exports = {
 
         return Promise.all(characteristicsPromises);
       });
+  },
+
+  increaseHelpfulness: (review_id) => {
+    const query = {
+      text:`
+      UPDATE reviews SET helpfulness = helpfulness + 1 WHERE id = $1
+      `,
+      values: [review_id]
+    };
+
+    return pgdb.pool.query(query);
   }
 };

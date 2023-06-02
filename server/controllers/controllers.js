@@ -1,4 +1,4 @@
-const { getProductReviews, getReviewsMetaData, addReview } = require('../models/pgdbModels.js');
+const { getProductReviews, getReviewsMetaData, addReview, increaseHelpfulness } = require('../models/pgdbModels.js');
 
 module.exports = {
   getReviews: (req, res) => {
@@ -33,8 +33,9 @@ module.exports = {
         }
       };
       const { result1, result2 } = data;
+      console.log(result2.rows[0]);
 
-      if (result1.rows[0] && result2.rows[0]) {
+      if (result1.rows.length && result2.rows.length) {
         result1.rows[0].characteristics.forEach((row) => {
           response.characteristics[row.name] = { id: row.characteristic_id, value: row.avg.toString() }
         });
@@ -55,5 +56,13 @@ module.exports = {
     .then(() => {
       res.sendStatus(201);
     });
+  },
+
+  postHelpfulness: (req, res) => {
+    console.log(req.params);
+    increaseHelpfulness(req.params.review_id)
+    .then(() => {
+      res.sendStatus(200);
+    })
   }
 }

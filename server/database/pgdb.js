@@ -141,94 +141,109 @@ async function createDatabase() {
     //uncomment above if not applied yet;
 
     const ratingCountTrigger = `
-    -- Create the trigger function
     CREATE OR REPLACE FUNCTION update_metadata_aggregation()
-      RETURNS TRIGGER AS $$
-    BEGIN
-      -- Update the existing row in metadata_aggregation if it exists
-      UPDATE metadata_aggregation
-      SET
-        ratings = subquery.ratings,
-        recommends = subquery.recommends
+  RETURNS TRIGGER AS $$
+BEGIN
+  IF EXISTS (SELECT * FROM metadata_aggregation WHERE product_id = NEW.product_id) THEN
+    UPDATE metadata_aggregation
+    SET ratings = (
+      SELECT jsonb_agg(jsonb_build_object('rating', r.rating, 'count', r.rating_count))
       FROM (
         SELECT
-          product_id,
-          jsonb_agg(jsonb_build_object('rating', rating, 'count', rating_count)) AS ratings,
-          jsonb_build_object(
-            'true', SUM(CASE WHEN recommend = true THEN recommend_count ELSE 0 END),
-            'false', SUM(CASE WHEN recommend = false THEN recommend_count ELSE 0 END)
-          ) AS recommends
-        FROM (
-          SELECT
-            product_id,
-            rating,
-            recommend,
-            COUNT(*) AS rating_count,
-            COUNT(*) FILTER (WHERE recommend = true) AS recommend_count
-          FROM reviews
-          WHERE product_id = NEW.product_id  -- Only consider the new row being inserted
-          GROUP BY product_id, rating, recommend
-        ) AS r
-        GROUP BY product_id
-      ) AS subquery
-      WHERE metadata_aggregation.product_id = subquery.product_id;
+          rating,
+          COUNT(*) AS rating_count
+        FROM reviews
+        WHERE product_id = NEW.product_id
+        GROUP BY rating
+      ) AS r
+    ),
+    recommends = (
+      SELECT jsonb_build_object(
+        'true', COUNT(*) FILTER (WHERE recommend = true),
+        'false', COUNT(*) FILTER (WHERE recommend = false)
+      )
+      FROM reviews
+      WHERE product_id = NEW.product_id
+    )
+    WHERE product_id = NEW.product_id;
+  ELSE
+    INSERT INTO metadata_aggregation (product_id, ratings, recommends)
+    SELECT NEW.product_id, (
+      SELECT jsonb_agg(jsonb_build_object('rating', r.rating, 'count', r.rating_count))
+      FROM (
+        SELECT
+          rating,
+          COUNT(*) AS rating_count
+        FROM reviews
+        WHERE product_id = NEW.product_id
+        GROUP BY rating
+      ) AS r
+    ),
+    (
+      SELECT jsonb_build_object(
+        'true', COUNT(*) FILTER (WHERE recommend = true),
+        'false', COUNT(*) FILTER (WHERE recommend = false)
+      )
+      FROM reviews
+      WHERE product_id = NEW.product_id
+    );
+  END IF;
 
-      IF NOT FOUND THEN
-        -- Insert a new row into metadata_aggregation if it doesn't exist
-        INSERT INTO metadata_aggregation (product_id, ratings, recommends)
-        VALUES (NEW.product_id, subquery.ratings, subquery.recommends);
-      END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
 
-      RETURN NULL; -- We don't need to return anything, so NULL is fine
-    END;
-    $$ LANGUAGE plpgsql;
-
-    -- Create the trigger
-    DROP TRIGGER IF EXISTS update_metadata_trigger ON reviews;
-    CREATE TRIGGER update_metadata_trigger
-    AFTER INSERT ON reviews
-    FOR EACH ROW
-    EXECUTE FUNCTION update_metadata_aggregation();
+-- Create the trigger
+DROP TRIGGER IF EXISTS update_metadata_trigger ON reviews;
+CREATE TRIGGER update_metadata_trigger
+AFTER INSERT ON reviews
+FOR EACH ROW
+EXECUTE FUNCTION update_metadata_aggregation();
 `;
 
 const characteristicsTrigger = `
-    CREATE OR REPLACE FUNCTION update_characteristics_metadata()
-      RETURNS TRIGGER
-      LANGUAGE PLPGSQL
-    AS $$
-    BEGIN
-      -- Update characteristics_metadata
-      UPDATE characteristics_metadata cm
-      SET characteristics = (
-        SELECT jsonb_agg(jsonb_build_object(
-          'characteristic_id', c.id,
-          'name', c.name,
-          'avg', cr.avg_value
-        ) ORDER BY c.id) AS characteristics_data
-        FROM characteristics c
-        JOIN (
-          SELECT cr.characteristic_id, AVG(cr.value) AS avg_value
-          FROM characteristic_reviews cr
-          WHERE cr.characteristic_id IN (
-            SELECT id FROM characteristics WHERE product_id = NEW.product_id
-          )
-          GROUP BY cr.characteristic_id
-        ) cr ON c.id = cr.characteristic_id
-        WHERE cm.product_id = NEW.product_id
-        GROUP BY cm.product_id
-      )
-      WHERE cm.product_id = NEW.product_id;
+CREATE OR REPLACE FUNCTION update_characteristics_metadata()
+  RETURNS TRIGGER
+  LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  IF EXISTS (SELECT * FROM characteristics_metadata WHERE product_id = NEW.product_id) THEN
+    UPDATE characteristics_metadata
+    SET characteristics = (
+      SELECT jsonb_agg(jsonb_build_object('name', c.name, 'avg', c.avg_value)::jsonb)
+      FROM (
+        SELECT c.name, AVG(r.value)::numeric AS avg_value
+        FROM characteristic_reviews r
+        JOIN characteristics c ON r.characteristic_id = c.id
+        WHERE c.product_id = NEW.product_id
+        GROUP BY c.name
+      ) AS c
+    )
+    WHERE product_id = NEW.product_id;
+  ELSE
+    INSERT INTO characteristics_metadata (product_id, characteristics)
+    SELECT NEW.product_id, (
+      SELECT jsonb_agg(jsonb_build_object('name', c.name, 'avg', c.avg_value)::jsonb)
+      FROM (
+        SELECT c.name, AVG(r.value)::numeric AS avg_value
+        FROM characteristic_reviews r
+        JOIN characteristics c ON r.characteristic_id = c.id
+        WHERE c.product_id = NEW.product_id
+        GROUP BY c.name
+      ) AS c
+    );
+  END IF;
 
-      RETURN NEW;
-    END;
-    $$;
+  RETURN NEW;
+END;
+$$;
 
     DROP TRIGGER IF EXISTS update_characteristics_metadata_trigger ON characteristics;
     CREATE TRIGGER update_characteristics_metadata_trigger
     AFTER INSERT ON characteristics
     FOR EACH ROW
     EXECUTE FUNCTION update_characteristics_metadata();
-    `
+    `;
 
     const { rows: reviewsCounterRows } = await databaseClient.query(
       `SELECT is_loaded FROM counter WHERE table_name = 'reviews';`
