@@ -30,23 +30,22 @@ module.exports = {
   },
 
   getReviewsMetaData: (product_id) => {
-
     async function executeQueries() {
       try {
         const client = await pgdb.pool.connect();
         const query1 = {
-          text:  `
+          text: `
           SELECT * FROM characteristics_metadata WHERE product_id = $1
           `,
-          values: [product_id]
+          values: [product_id],
         };
         const result1 = await client.query(query1);
 
         const query2 = {
-          text:  `
+          text: `
           SELECT * FROM metadata_aggregation WHERE product_id = $1
           `,
-          values: [product_id]
+          values: [product_id],
         };
         const result2 = await client.query(query2);
 
@@ -54,8 +53,8 @@ module.exports = {
 
         return {
           result1,
-          result2
-        }
+          result2,
+        };
       } catch (error) {
         console.error(error);
       }
@@ -63,8 +62,17 @@ module.exports = {
     return executeQueries();
   },
 
-  addReview: (product_id, rating, summary, body, recommend, name, email, photos, characteristics) => {
-
+  addReview: (
+    product_id,
+    rating,
+    summary,
+    body,
+    recommend,
+    name,
+    email,
+    photos,
+    characteristics,
+  ) => {
     const queries = [
       {
         text: `
@@ -78,21 +86,21 @@ module.exports = {
         text: `
         INSERT INTO photos (review_id, url)
         VALUES ($1, $2)
-        `
+        `,
       },
       {
         text: `
         INSERT INTO characteristics (product_id, name)
         VALUES ($1, $2)
         RETURNING id
-        `
+        `,
       },
       {
         text: `
         INSERT INTO characteristic_reviews (characteristic_id, review_id, value)
         VALUES ($1, $2, $3)
-        `
-      }
+        `,
+      },
     ];
 
     let reviewId;
@@ -104,7 +112,7 @@ module.exports = {
         const photoPromises = photos.map((url) => {
           const query = {
             text: queries[1].text,
-            values: [reviewId, url]
+            values: [reviewId, url],
           };
           return pgdb.pool.query(query);
         });
@@ -117,7 +125,7 @@ module.exports = {
         const characteristicsPromises = characteristicsArray.map((value, index) => {
           const query = {
             text: queries[2].text,
-            values: [product_id, names[index]]
+            values: [product_id, names[index]],
           };
 
           return pgdb.pool.query(query)
@@ -125,7 +133,7 @@ module.exports = {
               const characteristicId = result.rows[0].id;
               const query = {
                 text: queries[3].text,
-                values: [characteristicId, reviewId, value]
+                values: [characteristicId, reviewId, value],
               };
 
               return pgdb.pool.query(query);
@@ -138,12 +146,12 @@ module.exports = {
 
   increaseHelpfulness: (review_id) => {
     const query = {
-      text:`
+      text: `
       UPDATE reviews SET helpfulness = helpfulness + 1 WHERE id = $1
       `,
-      values: [review_id]
+      values: [review_id],
     };
 
     return pgdb.pool.query(query);
-  }
+  },
 };
