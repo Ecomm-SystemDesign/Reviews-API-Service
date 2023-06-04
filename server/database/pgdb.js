@@ -237,9 +237,9 @@ BEGIN
 END;
 $$;
 
-    DROP TRIGGER IF EXISTS update_characteristics_metadata_trigger ON characteristics;
+    DROP TRIGGER IF EXISTS update_characteristics_metadata_trigger ON reviews;
     CREATE TRIGGER update_characteristics_metadata_trigger
-    AFTER INSERT ON characteristics
+    AFTER INSERT ON reviews
     FOR EACH ROW
     EXECUTE FUNCTION update_characteristics_metadata();
     `;

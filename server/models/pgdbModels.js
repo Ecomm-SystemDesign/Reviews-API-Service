@@ -23,7 +23,7 @@ module.exports = {
       WHERE reviews.product_id = $1
       GROUP BY reviews.id, reviews.product_id, reviews.rating, reviews.date, reviews.summary, reviews.body, reviews.recommend, reviews.reported, reviews.reviewer_name, reviews.reviewer_email, reviews.response, reviews.helpfulness
       ${order}`,
-      values: [product_id]
+      values: [product_id],
     };
 
     return pgdb.pool.query(query);

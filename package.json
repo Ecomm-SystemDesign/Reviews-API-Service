@@ -22,7 +22,8 @@
     "nodemon": "^2.0.22",
     "path": "^0.12.7",
     "pg": "^8.11.0",
-    "postgres": "^3.3.4"
+    "postgres": "^3.3.4",
+    "random": "^4.1.0"
   },
   "devDependencies": {
     "eslint": "^8.42.0",
